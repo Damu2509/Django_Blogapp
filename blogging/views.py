@@ -1,32 +1,44 @@
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from django.http import Http404
 # Create your views here.
 
-from django.http import HttpResponse
-from .models import errors
+from django.http import HttpResponse, HttpResponseRedirect
+from .models import errors, choice
+from django.urls import reverse
 
+from django.views import generic
 from django.template import loader
 
 
+class IndexView(generic.ListView):
+    template_name='blogging/index.html'
+    cotext_object_name='latest_question_list'
 
-def detail(request,question_id):
-    return HttpResponse("You are looking at question %s ." %question_id)
+    def get_queryset(self):
+        return errors.objects.order_by('-date_posted')[:5]
 
-def results(request , question_id):
-    response="You are lookig at the results of question %s ."
-    return HttpResponse(response %question_id)
+class DetailView(generic.DetailView):
 
-def vote(request , question_id):
-    return HttpResponse("You're voting on question %s ." %question_id)
+    model = errors
+    template_name = "blogging/detail.html"
 
-def index(request):
-    latest_questions_list = errors.objects.order_by('-date_posted')[:5]
-    context = { 'latest_questions_list':latest_questions_list,}
 
-    return render(request,'blogging/index.html',context)
+class ResultsView(generic.DetailView):
+    model = errors
+    template_name='blogging/results.html'
 
-def detail(request , question_id):
 
-    question = get_object_or_404(errors,pk=question_id)
+def vote(request,question_id):
+    question = get_object_or_404(errors, pk=question_id)
+    try:
+        selected_choice = question.choice_set.get(pk=request.POST['choice'])
+    except(KeyError,choice.DoesNotExist):
+        return render(request, "blogging/detail.html", {'question':question, 'error_message':"You didn't select a choice.",})
 
-    return render(request,'blogging/detail.html',{'question':question})
+    else:
+        selected_choice.votes+=1
+        selected_choice.save()
+        return HttpResponseRedirect(reverse('blogging:results', args=(question.id,)))
+
+
+
